@@ -2067,13 +2067,22 @@ def api_library():
     return myfiles.Combined(lib.main, None) if lib.main else None
 
 
+# Said to the model in chats from other programs, whose people may not write English: asked in Spanish with the
+# prompt alone, one answer (about a generator in a garage) came back in English, and a Spanish search found nothing
+# in the library, which is in English (tested with Qwen3.5 4B). With this, answers came back in the person's language
+# and the searches in English.
+API_LANGUAGE = ("If the person writes in a language other than English, answer in their language, but always search "
+                "the library with a few English keywords: the library is in English.")
+
+
 def api_prompt(caps):
     """prompt_for() for a chat from another program: without the AI's memory notes (anyone with the key could read
     them), the names of the person's files only when it searches them, and no show_article (no app window there)."""
     files = [(it["name"], it["title"]) for it in myfiles.items(MY_DB) if it["status"] == "ready"] \
         if api_settings["my_files"] else []
     extra = prompt_section([], False, files, datetime.date.today())
-    return (custom_prompt() or system_prompt(api_library(), "tools" in caps, screen=False)) + (f"\n\n{extra}" if extra else "")
+    return (custom_prompt() or system_prompt(api_library(), "tools" in caps, screen=False)) \
+        + f"\n\n{API_LANGUAGE}" + (f"\n\n{extra}" if extra else "")
 
 
 WEBVIEW2_SETUP = os.path.join(ROOT, "MicrosoftEdgeWebview2Setup.exe")  # Microsoft's installer, in the Windows app

@@ -259,7 +259,10 @@ def attach_excerpts(library, messages):
 
 
 TOOL_MARKUP = ("<tool_call", "<function")
-SOURCES_LINE = re.compile(r"^[*_# ]*Sources?(?:[*_ ]*:.*|[*_ ]*)$", re.IGNORECASE | re.MULTILINE)  # or a "Sources" heading
+# "Fuentes" is Sources in Spanish: a model answering in Spanish (Open WebUI with a Spanish instruction) writes that, and
+# without this its line stayed, with titles it never read, above the app's own.
+SOURCES_WORD = r"(?:Sources?|Fuentes?)"
+SOURCES_LINE = re.compile(r"^[*_# ]*" + SOURCES_WORD + r"(?:[*_ ]*:.*|[*_ ]*)$", re.IGNORECASE | re.MULTILINE)  # or a heading
 LIST_ITEM = re.compile(r"\s*([-*•–+]|\d+[.)])\s")
 ID_ROW = re.compile(r"\s*\[ids?\s*\d{5,}\]", re.I)
 # A passage id the way models write one: "1403312", "[id 1403312]", "(ids 1403312 and 1403313, etc.)", "passage
@@ -271,7 +274,7 @@ ID_REMARK = re.compile(r"[ \t]*[(\[]\s*(?:passage\s+)?ids?\s*:?\s*\d{5,}(?:\s*(?
                        re.I)
 LOOKUP_PREAMBLE = re.compile(r"(?:let me|i'll|i will|i need to|i should|now i|next,? i|first,? i)\b[^\n]{0,200}?"
                              r"\b(?:search|look|check|read|open|find)\b[^\n]{0,200}$", re.I)
-INLINE_SOURCES = re.compile(r"([.!?])[ \t]+((?:\*\*)?Sources?(?:\*\*)?:[^\n]*?)\s*\Z")
+INLINE_SOURCES = re.compile(r"([.!?])[ \t]+((?:\*\*)?" + SOURCES_WORD + r"(?:\*\*)?:[^\n]*?)\s*\Z")
 # A Sources line made of tool calls ("Sources: search_library (generator carbon monoxide garage), read_article (...)"),
 # written out instead of looking anything up: Lightning opened an answer with one in the 0.3.1 Windows test.
 TOOL_SOURCES = re.compile(r"^[*_# ]*Sources?\b[^\n]*\b(?:search_library|read_article|show_article)\b[^\n]*(?:\n|\Z)",
@@ -645,8 +648,8 @@ def _sources_block(answer):
     if not found:
         return None
     line = found[-1]
-    plural = bool(re.match(r"^[*_# ]*Sources", line.group(0), re.IGNORECASE))
-    head = re.sub(r"^[*_# ]*Sources?[*_ ]*:?", "", line.group(0), flags=re.IGNORECASE)
+    plural = bool(re.match(r"^[*_# ]*(?:Sources|Fuentes)", line.group(0), re.IGNORECASE))
+    head = re.sub(r"^[*_# ]*" + SOURCES_WORD + r"[*_ ]*:?", "", line.group(0), flags=re.IGNORECASE)
     items, end = [p.strip(" *_.") for p in _split_outside_brackets(head)], line.end()
     if plural:
         bare = not [i for i in items if i]  # "Sources:" alone: the rows right under it are its list, bulleted or not

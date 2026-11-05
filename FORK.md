@@ -14,9 +14,9 @@ artículos que nunca abrió.
 | Archivo | Cambio |
 |---|---|
 | `app/openai_api.py` (nuevo) | La API estilo OpenAI: `GET /v1/models` y `POST /v1/chat/completions`, con y sin streaming, protegida con una clave Bearer. |
-| `app/server.py` | Opciones `--api [HOST:]PUERTO` y `--api-my-files`; clave en `api-key.txt` o en `SURVIVAL_LLM_API_KEY`; prompt y biblioteca propios del modo API (sin memoria, sin `show_article`); `library_free_gb`. |
+| `app/server.py` | Opciones `--api [HOST:]PUERTO` y `--api-my-files`; clave en `api-key.txt` o en `SURVIVAL_LLM_API_KEY`; prompt y biblioteca propios del modo API (sin memoria, sin `show_article`, responder en el idioma de la persona y buscar en inglés: `API_LANGUAGE`); `library_free_gb`. |
 | `app/static/app.js` | Las comprobaciones de espacio de la ventana de la biblioteca usan el disco donde irá la biblioteca. |
-| `core.py` | Parámetro `screen=False` (sin `show_article`); corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
+| `core.py` | Parámetro `screen=False` (sin `show_article`); `Fuentes:` se verifica como `Sources:`; corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
 | `packaging/build.sh` | Copia `openai_api.py` a la app y crea `Survival LLM Server.bat` en Windows. |
 | `tests/openai_api_test.py` (nuevo) | Pruebas de la API con un modelo y una biblioteca simulados (no necesita Ollama). |
 | `README.md` | Sección "Use it from other computers". |
@@ -65,24 +65,33 @@ artículos que nunca abrió.
 
 ## Respuestas en español
 
-No hay una opción de idioma propia: las instrucciones de la app están en inglés. Lo que sí funciona es que **las
-instrucciones del cliente se añaden después de las de la app** (con el encabezado "Instructions from the program the
-person is chatting in"). Poner en Open WebUI una instrucción de sistema hace que el modelo responda en español:
+Las preguntas hechas desde otros programas responden en el idioma de la persona sin configurar nada. El prompt de la API
+(`API_LANGUAGE` en `app/server.py`) le pide al modelo que **responda en el idioma en que le escriben, pero que busque en
+la biblioteca con palabras clave en inglés**, porque la biblioteca (Wikipedia, MedlinePlus, Ready.gov, CDC…) está en
+inglés y la búsqueda es por palabras clave: una búsqueda en español no encuentra nada.
 
-- Global: Settings > General > System Prompt.
-- Por modelo: Workspace > Models > editar > System Prompt.
-- Texto sugerido: `Responde siempre en español.`
+Además, **`Fuentes:` se verifica igual que `Sources:`** (`SOURCES_WORD` en `core.py`). Los modelos que responden en
+español escriben "Fuentes:", y antes esa línea quedaba tal cual, con títulos traducidos o inventados que el modelo
+nunca leyó, y debajo la línea verificada de la app. Ahora, si nombra algo que no leyó, se reemplaza por la línea real.
 
-Probado con qwen3.5:4b: la regla de seguridad del monóxido de carbono se mantuvo y la respuesta salió en español.
+**Cómo se probó** (qwen3.5:4b, tres preguntas en español con una biblioteca de prueba en inglés):
+
+| Prompt | Respuestas en español | Primera búsqueda en inglés |
+|---|---|---|
+| Sin la línea de idioma | 2 de 3 (la del generador salió en inglés) | 2 de 3 |
+| Con `API_LANGUAGE` (el actual) | 8 de 9 | 8 de 9 |
+| Una redacción más fuerte ("Always reply in the language…") | 6 de 6 | 3 de 6 (una vez buscó solo en español, no encontró nada y respondió de memoria) |
+
+Con un modelo pequeño no es 100 % seguro: alguna respuesta puede salir en inglés. Si pasa a menudo, añade en Open WebUI
+una instrucción de sistema (Settings > General > System Prompt, o por modelo en Workspace > Models), por ejemplo
+`Responde siempre en español.`; las instrucciones del cliente se añaden después de las de la app. La regla del
+monóxido de carbono se mantuvo en todas las pruebas.
 
 Lo que **sigue en inglés**:
-- La línea final `Sources:` y sus variantes ("Sources: none (from its own knowledge)"), que genera la app.
+- La línea `Sources:` que escribe la app cuando reemplaza la del modelo ("Sources: none opened…", "Sources: none (from
+  its own knowledge)").
 - Los pasos de búsqueda y lectura que se muestran como razonamiento ("Searched the library for…", "Read…").
 - La ventana propia de la app.
-- **La biblioteca.** Wikipedia, MedlinePlus, Ready.gov, CDC y el resto están en inglés, y la búsqueda es por
-  palabras clave. Los modelos suelen buscar en inglés aunque la pregunta sea en español, pero no está comprobado en
-  todos; si un modelo busca en español y no encuentra nada, añade a la instrucción: `Busca en la biblioteca con
-  palabras clave en inglés.` (sugerencia sin probar).
 
 ## GPU NVIDIA antigua (GTX 10xx) con Ollama 0.40.x en Windows
 

@@ -107,6 +107,28 @@ def request(path, body=None, key="secret-key"):
         return exc.code, exc.read().decode()
 
 
+# ---- a model answering in Spanish writes "Fuentes:", which is checked like "Sources:" ----
+SEARCH = {"message": {"content": "", "tool_calls": [
+    {"function": {"name": "search_library", "arguments": {"query": "fridge blackout"}}}]}}
+READ = {"message": {"content": "", "tool_calls": [{"function": {"name": "read_article", "arguments": {"id": 1403312}}}]}}
+
+
+def spanish(last_line):
+    rounds[:] = [[SEARCH], [READ], [{"message": {"content": "Unas 4 horas con la puerta cerrada.\n\n" + last_line}}]]
+    msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "¿Cuánto dura la comida en el refrigerador?"}]
+    return next(e for e in core.chat_events("nemotron", Lib(), msgs, caps={"tools"}) if e["type"] == "done")["answer"]
+
+
+got = spanish("**Fuentes:** CDC - Seguridad de Alimentos en Apagones")
+check("Fuentes with a made-up title: replaced by the real Sources line, once",
+      got.endswith("\n\nSources: Food Safety (Ready.gov)") and "Fuentes" not in got and got.count("Sources") == 1, got)
+got = spanish("Fuentes: Food Safety (Ready.gov)")
+check("Fuentes naming what it read: kept, no second line", got.count("Fuentes") == 1 and "Sources" not in got, got)
+got = spanish("Fuentes:\n- CDC - Guía inventada\n- Ready.gov")
+check("Fuentes as a list: replaced too", "Guía inventada" not in got and got.endswith("Sources: Food Safety (Ready.gov)"), got)
+got = spanish("Source: Food Safety (Ready.gov)")
+check("an English Source line works as before", got.count("Source") == 1 and "Sources" not in got, got)
+
 code, _ = request("/models", key="wrong")
 check("a wrong key is refused", code == 401, code)
 code, text = request("/models")
