@@ -159,6 +159,9 @@ printf '%s\r\n' \
 # keeps a console window open that shows the address and the API key; closing it stops the app.
 printf '%s\r\n' \
   '@echo off' \
+  'REM The AI model leaves the graphics card 5 minutes after the last question (the app keeps it 15), so the card' \
+  'REM is free for other things. SURVIVAL_LLM_NUM_CTX sets the context; it is 32768 tokens unless you set it here.' \
+  'set SURVIVAL_LLM_KEEP_ALIVE=5m' \
   'cd /D "%USERPROFILE%"' \
   '"%~dp0python\python.exe" "%~dp0app\app\server.py" --api' > "$WIN/Survival LLM Server.bat"
 (cd "$DIST/windows" && rm -f "$DIST/Survival-LLM-windows.zip" && zip -qr "$DIST/Survival-LLM-windows.zip" "Survival LLM")

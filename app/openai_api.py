@@ -200,7 +200,7 @@ def plain(model, caps, messages):
     text, final = [], {}
     # The answers' num_ctx, so Ollama doesn't load the model again for it. A title or a few tags need no reasoning:
     # Qwen reasoned for over ten minutes about a 3-word title on a computer without a graphics card.
-    options = {"num_ctx": 32768, "num_predict": TASK_LIMIT, "temperature": 0.3}
+    options = {"num_ctx": core.NUM_CTX, "num_predict": TASK_LIMIT, "temperature": 0.3}
     for chunk in core._stream(model, messages, None, False if "thinking" in caps else None, options):
         msg = chunk.get("message", {})
         if msg.get("thinking"):

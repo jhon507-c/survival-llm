@@ -40,7 +40,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from core import HOST, capabilities, chat_events, installed_models, system_prompt, trim  # noqa: E402
+from core import HOST, KEEP_ALIVE, NUM_CTX, capabilities, chat_events, installed_models, system_prompt, trim  # noqa: E402
 from library import myfiles, search  # noqa: E402
 from memory import MAX_CHARS as MEMORY_MAX, Memory, parse as parse_notes, prompt_section, size as notes_size  # noqa: E402
 from library.search import DB_PATH, LIB, TOPICS, Library  # noqa: E402
@@ -934,7 +934,8 @@ def warm_model(model):
         warming[model] = "loading"
         try:
             req = urllib.request.Request(HOST + "/api/generate", headers={"Content-Type": "application/json"},
-                                         data=json.dumps({"model": model, "keep_alive": "15m"}).encode())
+                                         data=json.dumps({"model": model, "keep_alive": KEEP_ALIVE,
+                                                          "options": {"num_ctx": NUM_CTX}}).encode())  # as chats ask
             urllib.request.urlopen(req, timeout=600).read()
             warming.pop(model, None)
         except OSError:

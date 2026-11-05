@@ -27,6 +27,28 @@ def _ollama_address(value):
 
 
 HOST = _ollama_address(os.environ.get("OLLAMA_HOST", "127.0.0.1:11434"))
+
+
+def _num_ctx():
+    try:
+        return max(4096, int(os.environ.get("SURVIVAL_LLM_NUM_CTX", "32768")))
+    except ValueError:
+        return 32768
+
+
+def _keep_alive():
+    value = os.environ.get("SURVIVAL_LLM_KEEP_ALIVE", "").strip()
+    if re.fullmatch(r"-?\d+", value):  # seconds; Ollama reads a bare number as seconds, 0 unloads, below 0 never
+        return int(value)
+    return value if re.fullmatch(r"(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+", value) else "15m"
+
+
+# How many tokens of the conversation the model holds in memory, and how long it stays loaded after the last question:
+# both are memory on a small graphics card that is also used for other things. SURVIVAL_LLM_NUM_CTX and
+# SURVIVAL_LLM_KEEP_ALIVE ("5m", "0" to unload after each answer, "-1" to never) change them; the defaults are as before.
+# (Qwen3.5 4B: 32,768 tokens took 3.4 GB and 8,192 took 3.1 GB, so for that one the time loaded matters more.)
+NUM_CTX = _num_ctx()
+KEEP_ALIVE = _keep_alive()
 MAX_TOOL_ROUNDS = 6
 # Longest reply the model may write in one go, set by the person's "Length limit" (tokens; -1 = no limit). A model
 # stuck repeating itself would otherwise run, and drain the battery, until someone noticed (Qwen 3.6 once went an
@@ -235,7 +257,7 @@ def run_tool(library, name, args):
 
 
 def _stream(model, messages, tools, think, options):
-    body = {"model": model, "messages": messages, "stream": True, "keep_alive": "15m", "options": options}
+    body = {"model": model, "messages": messages, "stream": True, "keep_alive": KEEP_ALIVE, "options": options}
     if tools:
         body["tools"] = tools
     if think is not None:
@@ -344,7 +366,7 @@ def chat_events(model, library, messages, reasoning="off", caps=None, length="no
     if test.startswith("think-limit="):
         think_cap = int(test.split("=", 1)[1])
     # The length limit is for the answer: reasoning comes on top of it, since Ollama counts both.
-    options = {"num_ctx": 32768, "num_predict": -1 if limit < 0 or think_cap < 0 else limit + think_cap,
+    options = {"num_ctx": NUM_CTX, "num_predict": -1 if limit < 0 or think_cap < 0 else limit + think_cap,
                **SAMPLING.get(family(model), {"temperature": 0.7})}
     sources, seen, tokens, seconds, cut_off, looked, unopened, named = {}, {}, 0, 0.0, False, False, [], None
     dropped = False

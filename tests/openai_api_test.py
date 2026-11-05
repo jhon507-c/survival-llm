@@ -34,6 +34,27 @@ for value, want in [("0.0.0.0:11434", "http://127.0.0.1:11434"), ("0.0.0.0", "ht
 check("the app's window keeps show_article",
       "show_article" in core.system_prompt(types.SimpleNamespace(labels=lambda: ["Ready.gov"]), True))
 
+# ---- context size and time loaded, from the environment (small graphics cards) ----
+def with_env(name, value, fn):
+    old = os.environ.get(name)
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
+    try:
+        return fn()
+    finally:
+        os.environ.pop(name, None) if old is None else os.environ.__setitem__(name, old)
+
+
+for value, want in [(None, "15m"), ("5m", "5m"), ("1h30m", "1h30m"), ("0", 0), ("-1", -1), ("300", 300), ("", "15m"),
+                    ("soon", "15m"), ("5 minutes", "15m"), (" 10m ", "10m")]:
+    got = with_env("SURVIVAL_LLM_KEEP_ALIVE", value, core._keep_alive)
+    check(f"SURVIVAL_LLM_KEEP_ALIVE={value!r}", got == want and type(got) is type(want), got)
+for value, want in [(None, 32768), ("16384", 16384), ("1000", 4096), ("lots", 32768), ("", 32768)]:
+    check(f"SURVIVAL_LLM_NUM_CTX={value!r}", with_env("SURVIVAL_LLM_NUM_CTX", value, core._num_ctx) == want)
+check("the defaults are as before", core.NUM_CTX == 32768 and core.KEEP_ALIVE == "15m", (core.NUM_CTX, core.KEEP_ALIVE))
+
 # ---- what streams, and what waits for the end ----
 long = ("Keep the fridge closed. " * 10).strip()  # past COMMIT_AT
 a = openai_api.Answer()

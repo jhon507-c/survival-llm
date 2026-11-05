@@ -16,8 +16,8 @@ artículos que nunca abrió.
 | `app/openai_api.py` (nuevo) | La API estilo OpenAI: `GET /v1/models` y `POST /v1/chat/completions`, con y sin streaming, protegida con una clave Bearer; recibe imágenes para los modelos con visión. |
 | `app/server.py` | Opciones `--api [HOST:]PUERTO` y `--api-my-files`; clave en `api-key.txt` o en `SURVIVAL_LLM_API_KEY`; prompt y biblioteca propios del modo API (sin memoria, sin `show_article`, responder en el idioma de la persona y buscar en inglés: `API_LANGUAGE`); `library_free_gb`. |
 | `app/static/app.js` | Las comprobaciones de espacio de la ventana de la biblioteca usan el disco donde irá la biblioteca. |
-| `core.py` | Parámetro `screen=False` (sin `show_article`); `Fuentes:` se verifica como `Sources:`; las imágenes no se pierden en los modelos sin herramientas; corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
-| `packaging/build.sh` | Copia `openai_api.py` a la app y crea `Survival LLM Server.bat` en Windows. |
+| `core.py` | Parámetro `screen=False` (sin `show_article`); `Fuentes:` se verifica como `Sources:`; las imágenes no se pierden en los modelos sin herramientas; `SURVIVAL_LLM_KEEP_ALIVE` y `SURVIVAL_LLM_NUM_CTX`; corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
+| `packaging/build.sh` | Copia `openai_api.py` a la app y crea `Survival LLM Server.bat` en Windows (con `SURVIVAL_LLM_KEEP_ALIVE=5m`). |
 | `tests/openai_api_test.py` (nuevo) | Pruebas de la API con un modelo y una biblioteca simulados (no necesita Ollama). |
 | `README.md` | Sección "Use it from other computers". |
 
@@ -117,6 +117,32 @@ fáciles: **no se probó con fotos de heridas, plantas o piezas reales**, y un m
 texto. En temas médicos o de comida, no te fíes de lo que el modelo diga que ve.
 
 La ventana propia de la app no tiene entrada de imágenes; esto solo funciona desde Open WebUI.
+
+## Memoria de la tarjeta gráfica compartida
+
+Si la tarjeta se usa también para otras cosas, dos variables de entorno controlan cuánta memoria retiene el modelo
+(`core.py`; valen para la app y para la API):
+
+| Variable | Qué hace | Por defecto |
+|---|---|---|
+| `SURVIVAL_LLM_KEEP_ALIVE` | Cuánto tiempo sigue cargado el modelo tras la última pregunta: `5m`, `1h`, `0` (se descarga tras cada respuesta) o `-1` (nunca). | `15m` |
+| `SURVIVAL_LLM_NUM_CTX` | Tokens de conversación que el modelo retiene (mínimo 4.096). | `32768` |
+
+Un valor inválido se ignora y se usa el de por defecto. `Survival LLM Server.bat` pone `SURVIVAL_LLM_KEEP_ALIVE=5m`; para
+cambiar el contexto, añade una línea `set SURVIVAL_LLM_NUM_CTX=16384` en ese `.bat`. Cuando el modelo está descargado, la
+primera pregunta tarda unos 12 s más en cargarlo (medido con qwen3.5:4b).
+
+**El contexto pesa menos de lo que parece, al menos en este modelo.** Medido en la GTX 1060 con qwen3.5:4b, todo en la GPU:
+
+| Contexto | Memoria del modelo | Velocidad |
+|---|---|---|
+| 32.768 | 3.444 MiB | 39 tok/s |
+| 16.384 | 3.156 MiB | 39 tok/s |
+| 8.192 | 3.099 MiB | 37 tok/s |
+
+Bajarlo a la mitad ahorra unos 290 MiB, así que con este modelo conviene más descargarlo antes (`KEEP_ALIVE`) que reducir el
+contexto. Con otros modelos (qwen2.5 de 7B usó unos 750 MiB solo en contexto) el ahorro será mayor. Un contexto pequeño
+puede quedarse corto si el modelo lee varios artículos seguidos o si pones el límite de longitud en "largo".
 
 ## GPU NVIDIA antigua (GTX 10xx) con Ollama 0.40.x en Windows
 
