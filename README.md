@@ -127,6 +127,8 @@ your question ─► local model (Ollama) ─► search_library ─► SQLite fu
 
 ## Use it from other computers
 
+(This fork's changes are listed, in Spanish, in [FORK.md](FORK.md), with how to answer in Spanish.)
+
 A computer with a graphics card can answer for the others on its network. Chat programs that speak OpenAI's API, such
 as [Open WebUI](https://openwebui.com), then use its model and library, with the app's instructions, library search
 and Sources check. (Pointing Open WebUI at Ollama itself gets the bare model: no library, and none of those.)
