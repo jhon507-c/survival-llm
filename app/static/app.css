@@ -248,7 +248,8 @@ textarea:focus { border-color: var(--accent); }
 .files-list li.empty { border: 0; }
 .files-list .f-main { flex: 1; min-width: 0; }
 .files-list .f-title { font-weight: 600; overflow-wrap: anywhere; }
-.files-list .meta, .files-list .error { margin-top: 2px; font-size: 13px; overflow-wrap: anywhere; }
+.files-list .meta, .files-list .error, .files-list .note { margin-top: 2px; font-size: 13px; overflow-wrap: anywhere; }
+.files-list .note { color: var(--accent); }  /* the file was read, but the person should know something about it */
 .files-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .files-foot .meta { flex: 1; margin: 0; overflow-wrap: anywhere; }
 #files-move-status:empty { display: none; }

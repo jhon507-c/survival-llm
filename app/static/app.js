@@ -1235,7 +1235,7 @@ function renderFiles() {
   $("files-list").innerHTML = f.items.length ? f.items.map((it) => `<li>
       <div class="f-main"><div class="f-title">${esc(it.title || it.name)}</div>
         <div class="meta">${it.title && it.title !== it.name ? `${esc(it.name)} · ` : ""}${it.status === "ready" ? "Ready: the AI searches it" : "The AI can't search this one"}</div>
-        ${it.error ? `<div class="error">${esc(it.error)}</div>` : ""}</div>
+        ${it.error ? `<div class="${it.status === "ready" ? "note" : "error"}">${esc(it.error)}</div>` : ""}</div>
       <button class="ghost" type="button" data-name="${esc(it.name)}">Remove</button></li>`).join("")
     : `<li class="empty meta">No files yet.</li>`;
   for (const b of $("files-list").querySelectorAll("button[data-name]")) b.onclick = () => removeFile(b.dataset.name, b);

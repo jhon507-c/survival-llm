@@ -258,8 +258,9 @@ def _index(db, folder, name, size, mtime):
         added = row[0]
     status, error, title, doc_id, count = "ready", None, None, None, 0
     try:
-        title, text = extract(os.path.join(folder, *name.split("/")))
+        title, text, note = extract(os.path.join(folder, *name.split("/")))
         doc_id, count = _write(db, name, title, text[:MAX_TEXT])
+        error = note or None  # a file that was read can still have a note: the list shows it under the file
     except Unreadable as exc:
         status, error = "unreadable", str(exc)
     except Exception:  # a damaged or unusual file: say so rather than stop reading the others
@@ -297,12 +298,13 @@ def _write(db, name, title, text):
 # ---------- getting the text out ----------
 
 def extract(path):
-    """(title, text) of a file, or Unreadable with a reason the person can act on."""
+    """(title, text, note) of a file, or Unreadable with a reason the person can act on. The note is something the
+    person should know about a file that was read ("" for none): a PDF's pages that are only pictures."""
     ext = os.path.splitext(path)[1].lower()
     if ext not in KINDS:
         raise Unreadable(CANT_READ)
-    title, text = {".pdf": _pdf, ".docx": _docx, ".odt": _odt, ".epub": _epub,
-                   ".html": _html_file, ".htm": _html_file}.get(ext, _plain)(path)
+    title, text, *note = {".pdf": _pdf, ".docx": _docx, ".odt": _odt, ".epub": _epub,
+                          ".html": _html_file, ".htm": _html_file}.get(ext, _plain)(path)
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     if not text:
         raise Unreadable("There's no text in this file.")
@@ -311,7 +313,7 @@ def extract(path):
         title = first if len(first) <= 80 and "\n" not in first and not first.endswith(".") else ""
     stem = os.path.splitext(os.path.basename(path))[0].replace("_", " ").strip()
     title = " ".join((title or "").split())[:150] or stem
-    return title, text
+    return title, text, "".join(note)
 
 
 def _pdf(path):
@@ -328,12 +330,14 @@ def _pdf(path):
         if not ok:
             raise Unreadable("This PDF is protected, so Survival LLM can't open it. Open it, print it to a new PDF "
                              "(Print, then Save as PDF), and add that copy.")
-    pages = []
-    for page in reader.pages:
+    pages, pictures = [], []
+    for number, page in enumerate(reader.pages, 1):
         try:
             pages.append(_pdf_paragraphs(page.extract_text() or ""))
         except Exception:
             pages.append("")
+        if not pages[-1] and _has_picture(page):
+            pictures.append(number)  # a scan or a photo: nothing to read
     text = "\n\n".join(p for p in pages if p)
     if len(text) < 40:
         raise Unreadable("This PDF is pictures of pages (a scan or photo) with no text in it. "
@@ -346,7 +350,41 @@ def _pdf(path):
     title = re.sub(r"^Microsoft (Word|PowerPoint) - ", "", title).strip()
     if re.fullmatch(r"(?i)(untitled.*|document\d*|.*\.(docx?|pdf|indd))", title):
         title = ""
-    return title, text
+    return title, text, _pictures_note(pictures, len(pages))
+
+
+def _has_picture(page):
+    """Whether a PDF page draws a picture (not one inside a form): with no text on it, that is a scan or a photo, as
+    opposed to a blank page. The page has to draw it, not just have it in reach: PDFs often share one list of pictures
+    between all their pages."""
+    try:
+        xobjects = page["/Resources"]["/XObject"].get_object()
+        images = {name for name, x in xobjects.items() if x.get_object().get("/Subtype") == "/Image"}
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return False
+    if not images:
+        return False
+    try:
+        contents = page.get_contents()
+        # not "if contents": a ContentStream is falsy, whatever it holds
+        drawn = {operands[0] for operands, operator in (contents.operations if contents is not None else [])
+                 if operator == b"Do" and operands}
+    except Exception:  # a page pypdf can't read the drawing of: it has no text and a picture in reach
+        return True
+    return bool(images & drawn)
+
+
+def _pictures_note(pictures, total):
+    """What to tell the person about the pages with only a picture on them ("" when there are none): the rest of the
+    PDF is read, and without this they would not know those pages are missing."""
+    if not pictures:
+        return ""
+    if len(pictures) == 1:
+        return (f"Page {pictures[0]} of {total} is only a picture (a scan or a photo), so the AI can't read it. "
+                "It searches the rest.")
+    listed = ", ".join(map(str, pictures[:8])) + (f" and {len(pictures) - 8} more" if len(pictures) > 8 else "")
+    return (f"{len(pictures)} of {total} pages ({listed}) are only pictures (scans or photos), so the AI can't read "
+            "them. It searches the rest.")
 
 
 def _pdf_paragraphs(text):

@@ -118,6 +118,26 @@ texto. En temas médicos o de comida, no te fíes de lo que el modelo diga que v
 
 La ventana propia de la app no tiene entrada de imágenes; esto solo funciona desde Open WebUI.
 
+## Tus archivos: PDF con páginas que son solo imágenes
+
+"Your files" lee solo el **texto** de los documentos (PDF, Word, EPUB, páginas web): las imágenes se ignoran, incluidos los
+diagramas y el texto que esté dentro de una imagen. Un PDF escaneado entero se rechazaba con un aviso, pero uno con
+**algunas páginas escaneadas** se aceptaba y esas páginas se perdían sin decirlo.
+
+Ahora, la lista de archivos muestra bajo ese PDF un aviso en ámbar, por ejemplo: *"Page 3 of 40 is only a picture (a scan
+or a photo), so the AI can't read it. It searches the rest."* (o *"3 of 40 pages (2, 5, 9) are only pictures…"*, con hasta 8
+páginas nombradas). El archivo sigue marcado como listo y se busca en el resto.
+
+- Solo cuentan las páginas **sin texto que dibujan una imagen**: una página en blanco no avisa, aunque el PDF comparta una
+  lista de imágenes entre todas sus páginas (es lo habitual).
+- Las páginas con texto y además imágenes (un manual con fotos) **no avisan**: sería ruido en casi todos los manuales.
+  Lo que solo esté en esas fotos no se lee.
+- Limitación: una imagen metida dentro de un formulario del PDF (poco habitual) no se detecta, y esa página no avisa.
+- Para leer un escaneo, pásalo antes por un programa de OCR que le añada una capa de texto (OCRmyPDF, "Reconocer texto"
+  de un visor de PDF) y sube esa copia.
+- Cambios: `library/myfiles.py` (`extract()` devuelve también la nota; `_has_picture`, `_pictures_note`), el aviso en
+  `app/static/app.js` y `app.css`, y la prueba `tests/pdf_pictures_test.py`.
+
 ## Memoria de la tarjeta gráfica compartida
 
 Si la tarjeta se usa también para otras cosas, dos variables de entorno controlan cuánta memoria retiene el modelo
