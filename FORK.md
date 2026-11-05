@@ -13,10 +13,10 @@ artículos que nunca abrió.
 
 | Archivo | Cambio |
 |---|---|
-| `app/openai_api.py` (nuevo) | La API estilo OpenAI: `GET /v1/models` y `POST /v1/chat/completions`, con y sin streaming, protegida con una clave Bearer. |
+| `app/openai_api.py` (nuevo) | La API estilo OpenAI: `GET /v1/models` y `POST /v1/chat/completions`, con y sin streaming, protegida con una clave Bearer; recibe imágenes para los modelos con visión. |
 | `app/server.py` | Opciones `--api [HOST:]PUERTO` y `--api-my-files`; clave en `api-key.txt` o en `SURVIVAL_LLM_API_KEY`; prompt y biblioteca propios del modo API (sin memoria, sin `show_article`, responder en el idioma de la persona y buscar en inglés: `API_LANGUAGE`); `library_free_gb`. |
 | `app/static/app.js` | Las comprobaciones de espacio de la ventana de la biblioteca usan el disco donde irá la biblioteca. |
-| `core.py` | Parámetro `screen=False` (sin `show_article`); `Fuentes:` se verifica como `Sources:`; corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
+| `core.py` | Parámetro `screen=False` (sin `show_article`); `Fuentes:` se verifica como `Sources:`; las imágenes no se pierden en los modelos sin herramientas; corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
 | `packaging/build.sh` | Copia `openai_api.py` a la app y crea `Survival LLM Server.bat` en Windows. |
 | `tests/openai_api_test.py` (nuevo) | Pruebas de la API con un modelo y una biblioteca simulados (no necesita Ollama). |
 | `README.md` | Sección "Use it from other computers". |
@@ -92,6 +92,31 @@ Lo que **sigue en inglés**:
   its own knowledge)").
 - Los pasos de búsqueda y lectura que se muestran como razonamiento ("Searched the library for…", "Read…").
 - La ventana propia de la app.
+
+## Fotos
+
+Las imágenes que se adjuntan en Open WebUI llegan al modelo si este puede verlas (Ollama lo indica como `vision`; por
+ejemplo qwen3.5 y gemma4, que son los que se probaron aquí; cada modelo lo indica en `ollama show`). Antes la API las
+descartaba en silencio.
+
+- Solo se aceptan imágenes que viajan dentro de la petición (`data:` URL, como las manda Open WebUI). **Nunca se descarga
+  una dirección web.** Una imagen que no se puede cargar se avisa en el texto del mensaje, para que el modelo no
+  responda como si la hubiera visto.
+- Se conservan las 6 imágenes más recientes de la conversación (cada una ocupa contexto).
+- Con un modelo que no ve imágenes, la API responde con un error 400 que nombra los modelos instalados que sí ven.
+  Una imagen más antigua en una conversación que cambió a un modelo sin visión se omite y se avisa en el texto.
+- Al modelo se le dice que describa lo que ve y cuánta seguridad tiene, que busque en la biblioteca lo que muestra, y que
+  **una foto no da un diagnóstico ni demuestra que una planta, hongo o baya sea comestible**: nunca debe decir que es
+  segura.
+- `core.py`: los modelos sin herramientas reciben extractos de la biblioteca añadidos a la pregunta, y ese paso borraba
+  las imágenes del mensaje; ahora las conserva.
+
+**Cómo se probó** (qwen3.5:4b en la GPU por Vulkan): una captura de pantalla con texto (leyó "1.3 GB" y buscó en la
+biblioteca con palabras en inglés) y una cruz roja dibujada (la reconoció como el símbolo de la Cruz Roja). Son imágenes
+fáciles: **no se probó con fotos de heridas, plantas o piezas reales**, y un modelo de 4B lee fotos bastante peor que
+texto. En temas médicos o de comida, no te fíes de lo que el modelo diga que ve.
+
+La ventana propia de la app no tiene entrada de imágenes; esto solo funciona desde Open WebUI.
 
 ## GPU NVIDIA antigua (GTX 10xx) con Ollama 0.40.x en Windows
 

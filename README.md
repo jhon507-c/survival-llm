@@ -153,6 +153,9 @@ How it differs from the app's own window:
   after part of it went out (it asked the model again) is followed by the corrected answer.
 - **Open WebUI's own requests** (a chat's title, its tags, follow-up questions) go straight to the model, without the
   library. Tools added in Open WebUI aren't passed on, and it can't open an article on anyone's screen.
+- **Photos** attached in Open WebUI reach the model when it can see (Ollama lists it as `vision`); other models answer
+  with an error that names the installed ones that can. A photo can't give a diagnosis or show that a plant or mushroom
+  is safe to eat, and the model is told so. Web addresses are never fetched.
 - **One graphics card for everyone**: answers slow down while several people ask at once.
 - **The key and the chats cross the network unencrypted** (plain HTTP). Use it on a network you trust, or over a VPN
   such as Tailscale.

@@ -254,7 +254,7 @@ def attach_excerpts(library, messages):
         doc = library.read(h["id"], max_chars=2500)
         blocks.append(f"[{doc['title']} ({doc['source']})]\n{doc['text']}")
     if blocks:
-        messages[-1] = {"role": "user", "content": question + "\n\nLibrary excerpts:\n\n" + "\n\n".join(blocks)}
+        messages[-1] = {**messages[-1], "content": question + "\n\nLibrary excerpts:\n\n" + "\n\n".join(blocks)}  # keeps its images
     return [{"type": "read", **{k: h[k] for k in ("id", "title", "source", "official")}} for h in hits]
 
 

@@ -6,6 +6,7 @@ listens on 127.0.0.1 only. Every request needs the key from api-key.txt, with th
 "Authorization: Bearer KEY". Left out: the AI's memory notes about the person, which anyone with the key could read
 or add to, and the person's own files unless the server was started with --api-my-files.
 """
+import base64
 import json
 import re
 import secrets
@@ -24,6 +25,13 @@ from core import ID_REMARK, chat_events, trim
 REASONING = {"none": "off", "minimal": "off", "low": "short", "medium": "medium", "high": "long"}
 TASK = "### Task:"  # how Open WebUI starts requests of its own: a chat's title, its tags, follow-up questions
 TASK_LIMIT = 1024  # tokens: those are short
+MAX_IMAGES = 6  # pictures kept in a request, the most recent
+DATA_URL = re.compile(r"^data:image/[\w.+-]+;base64,([A-Za-z0-9+/=\s]+)$")
+# Said to the model when the person attached a picture. A photo can't diagnose anything or show that a wild plant,
+# mushroom or berry is safe to eat, and a small model reads photos far less well than text.
+IMAGE_NOTE = ("The person attached a photo. Say briefly what you can see and how sure you are, then search the library "
+              "for what it shows. A photo can't give a diagnosis, and can't show that a plant, mushroom or berry is "
+              "safe to eat: say so, and never tell them it is safe.")
 MAX_BODY = 32 * 1024 ** 2  # a long chat, with pictures the model can't see
 CORRECTED = "\n\n---\n\nCorrected answer:\n\n"
 # Text before a lookup isn't the answer ("Let me check the library."), and the client can't take text back, so the
@@ -43,18 +51,59 @@ def content_text(content):
     return ""
 
 
+def content_images(content):
+    """(the base64 pictures in a message's parts, how many it couldn't use). Only pictures sent inside the request
+    (data: URLs, which is how Open WebUI sends what the person attaches): a web address is never fetched."""
+    found, skipped = [], 0
+    for part in content if isinstance(content, list) else []:
+        if not isinstance(part, dict) or part.get("type") != "image_url":
+            continue
+        url = part.get("image_url")
+        url = url.get("url") if isinstance(url, dict) else url
+        match = DATA_URL.match(url) if isinstance(url, str) else None
+        try:
+            if not match:
+                raise ValueError("not a data URL")
+            base64.b64decode(match.group(1), validate=True)
+            found.append(match.group(1))
+        except ValueError:  # binascii.Error is one
+            skipped += 1
+    return found, skipped
+
+
 def parse_messages(raw):
-    """OpenAI chat messages as (the client's system messages, Ollama user and assistant messages)."""
+    """OpenAI chat messages as (the client's system messages, Ollama user and assistant messages). A message with
+    pictures carries them as "images"; one it couldn't load says so in its text, so the model doesn't answer as if it
+    had seen it."""
     system, chat = [], []
     for m in raw if isinstance(raw, list) else []:
         if not isinstance(m, dict):
             continue
         text = content_text(m.get("content")).strip()
+        images, skipped = content_images(m.get("content"))
+        if skipped:
+            text = f"{text}\n\n[{skipped} attached image(s) could not be loaded.]".strip()
         if m.get("role") in ("system", "developer") and text:
             system.append(text)
-        elif m.get("role") in ("user", "assistant") and text:
-            chat.append({"role": m["role"], "content": text})
+        elif m.get("role") in ("user", "assistant") and (text or images):
+            chat.append({"role": m["role"], "content": text, **({"images": images} if images else {})})
     return system, chat
+
+
+def limit_images(messages, can_see):
+    """Keep the pictures of the most recent MAX_IMAGES, as each takes room in the model's context, and none when the
+    model can't see (an earlier picture in a chat that moved to another model). What is left out is said in the
+    message's text. Returns how many pictures are kept."""
+    kept = 0
+    for m in reversed(messages):
+        images = m.pop("images", None) or []
+        room = MAX_IMAGES - kept if can_see else 0
+        if images[:room]:
+            m["images"] = images[:room]
+            kept += len(m["images"])
+        if len(images) > room:
+            m["content"] = f"{m['content']}\n\n[{len(images) - room} attached image(s) not shown to you.]".strip()
+    return kept
 
 
 def settled(text):
@@ -227,10 +276,15 @@ class Handler(BaseHTTPRequestHandler):
         if model not in self.app.chat_models():
             return self._error(404, f"No model called {body.get('model')!r} is installed on this computer.")
         caps = self.app.model_caps(model)
+        if messages[-1].get("images") and "vision" not in caps:
+            seeing = [m for m in self.app.chat_models() if "vision" in self.app.model_caps(m)]
+            return self._error(400, f"{model} can't read images. Pick a model that can"
+                                    + (f": {', '.join(seeing)}." if seeing else " (none installed on this computer can)."))
+        seen = limit_images(messages, "vision" in caps)
         if messages[-1]["content"].startswith(TASK):
             events = plain(model, caps, [{"role": "system", "content": s} for s in system] + messages)
         else:
-            prompt = self.app.api_prompt(caps) + "".join(
+            prompt = self.app.api_prompt(caps) + (f"\n\n{IMAGE_NOTE}" if seen else "") + "".join(
                 f"\n\nInstructions from the program the person is chatting in:\n{s}" for s in system)
             messages = [{"role": "system", "content": prompt}] + messages
             trim(messages)

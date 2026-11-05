@@ -90,7 +90,7 @@ class Lib:
 
 app = types.SimpleNamespace(
     QuietServer=QuietServer, chat_models=lambda: ["nemotron-3.5-lightning:30b-a3b", "gemma4"],
-    model_caps=lambda m: {"tools", "completion"}, api_library=Lib,
+    model_caps=lambda m: {"tools", "completion"} | ({"vision"} if m.startswith("gemma4") else set()), api_library=Lib,
     api_prompt=lambda caps: core.system_prompt(Lib(), "tools" in caps, screen=False),
     friendly_error=lambda exc: f"Something went wrong: {exc}")
 server = openai_api.serve(app, ("127.0.0.1", 0), "secret-key")
@@ -184,6 +184,65 @@ code, text = request("/chat/completions", {"model": "llama9", "messages": [{"rol
 check("a model that isn't installed: 404", code == 404, code)
 code, text = request("/chat/completions", {"model": "gemma4", "messages": [{"role": "assistant", "content": "Hi"}]})
 check("no question from the person: 400", code == 400, code)
+
+# ---- pictures the person attaches (a vision model sees them; others say so) ----
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
+
+def picture(url):
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
+good = f"data:image/png;base64,{PNG}"
+system_msgs, parsed = openai_api.parse_messages([{"role": "user", "content": [
+    {"type": "text", "text": "What is this plant?"}, picture(good), picture("https://example.com/a.png"),
+    picture("data:image/png;base64,@@@not base64@@@"), {"type": "image_url", "image_url": good}]}])
+check("a data URL picture is kept, as the base64 text", parsed[0].get("images") == [PNG, PNG], parsed[0].get("images"))
+check("a web address and a damaged picture are never loaded, and the text says so",
+      "[2 attached image(s) could not be loaded.]" in parsed[0]["content"], parsed[0]["content"])
+check("a message that is only a picture still counts",
+      openai_api.parse_messages([{"role": "user", "content": [picture(good)]}])[1][0]["images"] == [PNG])
+many = [{"role": "user", "content": f"q{n}", "images": [PNG, PNG]} for n in range(5)]
+kept = openai_api.limit_images(many, True)
+counts = [len(m.get("images", [])) for m in many]
+check("only the most recent pictures are kept", kept == openai_api.MAX_IMAGES and counts == [0, 0, 2, 2, 2], counts)
+check("what was left out is said in the message", "not shown to you" in many[0]["content"], many[0]["content"])
+blind = [{"role": "user", "content": "q", "images": [PNG]}]
+check("a model that can't see gets none, told so", openai_api.limit_images(blind, False) == 0
+      and "images" not in blind[0] and "not shown to you" in blind[0]["content"], blind)
+
+rounds[:] = [[{"message": {"content": "Looks like a leaf."}}]]
+calls.clear()
+code, text = request("/chat/completions", {"model": "gemma4", "messages": [{"role": "user", "content": [
+    {"type": "text", "text": "What is this plant?"}, picture(good)]}]})
+last = calls[0]["messages"][-1] if calls else {}
+check("a vision model gets the picture", code == 200 and last.get("images") == [PNG] and last["content"] == "What is this plant?",
+      (code, last.get("images"), text[:200]))
+check("and is told what a photo can't show", "never tell them it is safe" in calls[0]["messages"][0]["content"])
+rounds[:] = [[{"message": {"content": "OK"}}]]
+calls.clear()
+request("/chat/completions", {"model": "gemma4", "messages": [{"role": "user", "content": "No picture here."}]})
+check("no picture, no photo note", calls and "attached a photo" not in calls[0]["messages"][0]["content"])
+
+code, text = request("/chat/completions", {"model": "nemotron-3.5-lightning:30b-a3b", "messages": [
+    {"role": "user", "content": [{"type": "text", "text": "What is this?"}, picture(good)]}]})
+check("a model that can't read images: 400 that names one that can",
+      code == 400 and "can't read images" in text and "gemma4" in text, (code, text))
+rounds[:] = [[{"message": {"content": "Fine."}}]]
+calls.clear()
+code, _ = request("/chat/completions", {"model": "nemotron-3.5-lightning:30b-a3b", "messages": [
+    {"role": "user", "content": [{"type": "text", "text": "Earlier photo"}, picture(good)]},
+    {"role": "assistant", "content": "A leaf."}, {"role": "user", "content": "And what should I do?"}]})
+check("a picture earlier in a chat that moved to a model that can't see: answered, without it",
+      code == 200 and not any(m.get("images") for m in calls[0]["messages"]), code)
+
+rounds[:] = [[{"message": {"content": "A leaf."}}]]
+msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "What is this?", "images": [PNG]}]
+calls.clear()
+list(core.chat_events("gemma4", Lib(), msgs, caps={"vision", "completion"}))  # no tools: excerpts are added to the question
+check("the pictures survive the library excerpts a model without tools gets",
+      calls and calls[0]["messages"][-1].get("images") == [PNG] and "Library excerpts" in calls[0]["messages"][-1]["content"],
+      calls and calls[0]["messages"][-1])
 
 server.shutdown()
 print("all passed" if not FAILS else f"{len(FAILS)} failed")
