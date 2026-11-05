@@ -13,7 +13,20 @@ import urllib.request
 from library.search import STOPWORDS, TOPICS
 from memory import _stems, asked_memory, forgets
 
-HOST = "http://" + os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
+
+def _ollama_address(value):
+    """OLLAMA_HOST as an address to connect to. Ollama reads it as where to listen too, and "0.0.0.0:11434" (every
+    network, how people share an Ollama) can't be connected to on Windows: the app found no models at all."""
+    value = re.sub(r"^https?://", "", value.strip()).rstrip("/")
+    host, port = value.rsplit(":", 1) if re.search(r"^(?:\[.*\]|[^:]*):\d+$", value) else (value, "11434")
+    if host in ("", "0.0.0.0", "[::]", "::"):
+        host = "127.0.0.1"
+    elif ":" in host and not host.startswith("["):  # an IPv6 address
+        host = f"[{host}]"
+    return f"http://{host}:{port}"
+
+
+HOST = _ollama_address(os.environ.get("OLLAMA_HOST", "127.0.0.1:11434"))
 MAX_TOOL_ROUNDS = 6
 # Longest reply the model may write in one go, set by the person's "Length limit" (tokens; -1 = no limit). A model
 # stuck repeating itself would otherwise run, and drain the battery, until someone noticed (Qwen 3.6 once went an
@@ -28,7 +41,8 @@ BASE_PROMPT = """You are an offline assistant running entirely on this computer,
 
 LIBRARY_PROMPT = """
 
-You have an offline library: search it with search_library and read results with read_article. The ids are for your tools; don't show them to the person. It holds: {labels}.{personal} If the person asks to see a source or the full instructions, open it for them with show_article."""
+You have an offline library: search it with search_library and read results with read_article. The ids are for your tools; don't show them to the person. It holds: {labels}.{personal}"""
+SHOW_PROMPT = " If the person asks to see a source or the full instructions, open it for them with show_article."
 
 RULES = """
 
@@ -66,6 +80,8 @@ TOOLS = [
             "id": {"type": "integer", "description": "The id from search_library or read_article"}},
             "required": ["id"]}}},
 ]
+# For a chat in another program (app/openai_api.py): there is no app window to open an article in.
+NO_SCREEN_TOOLS = [t for t in TOOLS if t["function"]["name"] != "show_article"]
 
 # Qwen drafts an answer before it searches when its reasoning is fully off, so with Reasoning off it still gets a brief
 # think (held to the short limit); Qwen's highest effort goes with the long and unlimited settings.
@@ -122,15 +138,16 @@ def think_setting(model, caps, reasoning="off"):
     return "low" if fam == "qwen" and reasoning == "short" else True
 
 
-def system_prompt(library, tools=True):
-    """library: a Library (its sources get listed for the model) or None."""
+def system_prompt(library, tools=True, screen=True):
+    """library: a Library (its sources get listed for the model) or None. screen: whether the app's window is there to
+    show an article in (not for a chat in another program)."""
     has_library = library is not None
     if has_library and tools:
         labels = ", ".join(library.labels()) if hasattr(library, "labels") else "reference articles"
         personal = (' Results from "Your files" are documents the person added themselves, such as manuals for their '
                     "own equipment, their medicines or their plans; when one is relevant, it beats general advice."
                     if getattr(library, "has_personal", False) else "")
-        return BASE_PROMPT + LIBRARY_PROMPT.format(labels=labels, personal=personal) + RULES.format(
+        return BASE_PROMPT + LIBRARY_PROMPT.format(labels=labels, personal=personal) + (SHOW_PROMPT if screen else "") + RULES.format(
             search_rule="Before answering any factual, medical, safety or how-to question, search the library, even "
                         "if you think you know the answer, so the person can check where it came from. Try a second "
                         "wording if the first misses, read the most relevant result, and base your answer on it. If "
@@ -308,13 +325,13 @@ PERSONAL = re.compile(r"\b(i|i'm|im|i've|ive|i'd|my|me|mine|myself|we|we're|we'v
                       r"family|household|roommates?)\b", re.I)
 
 
-def chat_events(model, library, messages, reasoning="off", caps=None, length="normal", memory=None):
+def chat_events(model, library, messages, reasoning="off", caps=None, length="normal", memory=None, screen=True):
     """Answer the last user message. Yields thinking/search/read/show/token/tick/done events (thinking and token
     events carry the model's reasoning and answer as they stream), then, with a memory the person lets the AI write
-    to, memory_check and memory events from a short step after the answer."""
+    to, memory_check and memory events from a short step after the answer. screen=False: no show_article tool."""
     caps = capabilities(model) if caps is None else caps
     can_call = "tools" in caps
-    tools = TOOLS if (library and can_call) else None
+    tools = (TOOLS if screen else NO_SCREEN_TOOLS) if (library and can_call) else None
     question = messages[-1]["content"]
     think = think_setting(model, caps, reasoning)
     limit = LENGTH_LIMITS.get(length, LENGTH_LIMITS["normal"])

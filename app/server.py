@@ -1708,6 +1708,7 @@ class Handler(BaseHTTPRequestHandler):
             "packs_error": "loading" if manifest["packs"] is None and manifest.get("fetching") else manifest["error"],
             "setup": setup_status(),
             "library_dir": LIB, "files_dir": MY_DIR, "disk_free_gb": disk_free_gb(),
+            "library_free_gb": disk_free_gb(os.path.dirname(LIB)),  # the library may be on another drive
             # a library folder they picked that isn't there now: a drive that's unplugged, most likely
             "library_away": not docs and bool(search.chosen_folder("library_dir")) and not os.path.isdir(LIB),
             "my_files": {"ready": mine, "busy": myfiles.progress["busy"]},
@@ -2011,6 +2012,70 @@ def prompt_for(caps):
     return (custom_prompt() or system_prompt(library(), tools)) + (f"\n\n{extra}" if extra else "")
 
 
+# ---------- chats from other programs on the network (--api, app/openai_api.py) ----------
+
+API_KEY = os.path.join(APP_DIR, "api-key.txt")
+api_settings = {"my_files": False}  # --api-my-files: chats from other programs search the person's files too
+
+
+def api_key():
+    """The key other programs need: $SURVIVAL_LLM_API_KEY, else the one in api-key.txt, made the first time."""
+    if os.environ.get("SURVIVAL_LLM_API_KEY"):
+        return os.environ["SURVIVAL_LLM_API_KEY"].strip()
+    try:
+        with open(API_KEY, encoding="utf-8") as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except OSError:
+        pass
+    key = secrets.token_urlsafe(24)
+    os.makedirs(APP_DIR, exist_ok=True)
+    with open(API_KEY, "w", encoding="utf-8") as f:
+        f.write(key + "\n")
+    return key
+
+
+def api_address(value):
+    """--api's [HOST:]PORT as (host, port): every network the computer is on (0.0.0.0) unless it names one."""
+    host, _, port = value.rpartition(":") if ":" in value else ("", "", value)
+    return host or "0.0.0.0", int(port or 8766)
+
+
+def api_urls(host, port):
+    """Where other computers reach the API: this computer's network addresses when it listens on all of them."""
+    hosts = [host]
+    if host == "0.0.0.0":
+        try:
+            hosts = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")]
+        except OSError:
+            pass
+        hosts = hosts or ["this computer's network address"]
+    return [f"http://{h}:{port}/v1" for h in hosts]
+
+
+def chat_models():
+    """Installed models that can chat, named as the app names them ([] while Ollama isn't running)."""
+    return [m.removesuffix(":latest") for m in visible_models(installed_models()) or [] if not any(x in m for x in NOT_CHAT)]
+
+
+def api_library():
+    """What chats from other programs search: the library, and the person's own files only with --api-my-files."""
+    lib = library()
+    if lib is None or api_settings["my_files"]:
+        return lib
+    return myfiles.Combined(lib.main, None) if lib.main else None
+
+
+def api_prompt(caps):
+    """prompt_for() for a chat from another program: without the AI's memory notes (anyone with the key could read
+    them), the names of the person's files only when it searches them, and no show_article (no app window there)."""
+    files = [(it["name"], it["title"]) for it in myfiles.items(MY_DB) if it["status"] == "ready"] \
+        if api_settings["my_files"] else []
+    extra = prompt_section([], False, files, datetime.date.today())
+    return (custom_prompt() or system_prompt(api_library(), "tools" in caps, screen=False)) + (f"\n\n{extra}" if extra else "")
+
+
 WEBVIEW2_SETUP = os.path.join(ROOT, "MicrosoftEdgeWebview2Setup.exe")  # Microsoft's installer, in the Windows app
 WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 WEBVIEW2_KEYS = ("{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}",  # runtime, beta,
@@ -2109,6 +2174,8 @@ if __name__ == "__main__":
     existing = None if "--port" in sys.argv else running_instance()  # an explicit port means "start another"
     if existing:  # opened twice: just bring up the one already running
         print(f"Survival LLM is already running at {existing}")
+        if "--api" in sys.argv:
+            print("Quit it first to start Survival LLM with --api.")
         if not headless and (use_browser or not open_window(existing)):
             webbrowser.open(existing)
         sys.exit(0)
@@ -2129,6 +2196,18 @@ if __name__ == "__main__":
         pass  # not there, or holding a download
     print(f"{datetime.datetime.now():%Y-%m-%d %H:%M} Survival LLM {VERSION}{f' (dev: {DEV})' if DEV else ''} is running at "
           f"{url}", flush=True)  # the date tells one run's lines in app.log from the next
+    if "--api" in sys.argv:  # other computers' chat programs (Open WebUI, say) use this one's model and library
+        import openai_api
+        api_settings["my_files"] = "--api-my-files" in sys.argv
+        after = sys.argv[sys.argv.index("--api") + 1:]
+        where = after[0] if after and not after[0].startswith("--") else ""
+        try:
+            host, port = api_address(where)
+            openai_api.serve(sys.modules[__name__], (host, port), api_key())
+            print(f"Other programs can use it at {' or '.join(api_urls(host, port))} with the API key {api_key()} "
+                  f"(kept in {API_KEY}){'; it searches your files too' if api_settings['my_files'] else ''}.", flush=True)
+        except (OSError, ValueError) as exc:
+            print(f"Couldn't start the API at {where or '0.0.0.0:8766'} ({exc}).", flush=True)
     check_my_files()  # files put in the folder while the app was closed
     threading.Thread(target=auto_check_updates, daemon=True).start()
     if setup_plan():  # quit in the middle of the first-run downloads: carry on where they stopped

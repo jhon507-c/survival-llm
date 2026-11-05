@@ -409,12 +409,12 @@ function chooseView(s) {
   if (!needs.library) lib = `<p class="ob-done">Already on this computer: ${s.library.articles.toLocaleString()} articles.</p>`;
   else if (packs.length) {
     lib = packs.map((p) => {
-      const fits = p.disk_gb + 5 <= s.disk_free_gb;
+      const fits = p.disk_gb + 5 <= (s.library_free_gb ?? s.disk_free_gb);
       return option("pack", p.id, p.id === choice.pack, fits, `<span class="ob-name">${esc(p.name)}</span>
         <span class="ob-size">${sizeText(p.gb)}</span>
         <span class="ob-about">${esc(p.about)}.${p.articles ? ` ${p.articles.toLocaleString()} articles.` : ""}</span>
         <span class="ob-meta">${fits ? `${cap(timeText((p.gb * 1e9) / TYPICAL_SPEED))} to download · needs ${p.disk_gb} GB free while it installs`
-          : `Needs ${p.disk_gb + 5} GB of free disk space; this computer has ${s.disk_free_gb} GB`}</span>`);
+          : `Needs ${p.disk_gb + 5} GB of free disk space; the library's drive has ${s.library_free_gb ?? s.disk_free_gb} GB`}</span>`);
     }).join("");
   } else {
     lib = s.packs_error === "unavailable"
@@ -676,7 +676,7 @@ function renderLibrary() {
   }
   const others = (s.packs || []).filter((p) => p.id !== lib?.pack);
   for (const p of others) {
-    const job = jobFor(`library:${p.id}`), fits = p.disk_gb + 5 <= s.disk_free_gb;
+    const job = jobFor(`library:${p.id}`), fits = p.disk_gb + 5 <= (s.library_free_gb ?? s.disk_free_gb);
     html += `<h3>${lib ? "Switch to" : "Download"} ${esc(p.name)}</h3>
       <p>${esc(p.about)}.${p.articles ? ` ${p.articles.toLocaleString()} articles.` : ""}</p>`;
     if (busyJob(job)) {
@@ -684,7 +684,7 @@ function renderLibrary() {
     } else {
       html += `${job?.status === "error" ? `<p class="error">${esc(job.error)}</p>` : ""}
         <p class="meta">${sizeText(p.gb)} download, ${timeText((p.gb * 1e9) / TYPICAL_SPEED)} on typical home internet. Needs
-          ${p.disk_gb} GB free while it installs; this computer has ${s.disk_free_gb} GB.${lib ? " Your current library keeps working until the new one is ready, then the new one replaces it." : ""}</p>
+          ${p.disk_gb} GB free while it installs; the library's drive has ${s.library_free_gb ?? s.disk_free_gb} GB.${lib ? " Your current library keeps working until the new one is ready, then the new one replaces it." : ""}</p>
         <button class="${lib ? "ghost" : "primary"}" type="button" data-pack="${esc(p.id)}"${fits && !otherBusy ? "" : " disabled"}>
           ${isArmed(`switch:${p.id}`) ? "Click again to download it" : `${lib ? "Switch to" : "Download"} ${esc(p.name)} (${sizeText(p.gb)})`}</button>`;
     }

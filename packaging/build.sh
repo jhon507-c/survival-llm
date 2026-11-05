@@ -36,7 +36,7 @@ copy_app() {  # $1 = destination folder for the app code
   mkdir -p "$1/library" "$1/app/static"
   cp "$REPO/core.py" "$REPO/memory.py" "$1/"
   cp "$REPO/library/search.py" "$REPO/library/passages.py" "$REPO/library/myfiles.py" "$1/library/"
-  cp "$REPO/app/server.py" "$1/app/"
+  cp "$REPO/app/server.py" "$REPO/app/openai_api.py" "$1/app/"
   cp "$REPO/app/static/"* "$1/app/static/"
   cp "$REPO/LICENSE" "$REPO/README.md" "$REPO/SOURCES.md" "$1/"
   echo "$VERSION" > "$1/version.txt"  # the app compares it with the published update.json
@@ -155,6 +155,12 @@ PY
 printf '%s\r\n' \
   '@echo off' \
   'start "" /D "%USERPROFILE%" "%~dp0python\pythonw.exe" "%~dp0app\app\server.py"' > "$WIN/Survival LLM.bat"
+# The same app, also answering chat programs on other computers (README "Use it from other computers"). python.exe
+# keeps a console window open that shows the address and the API key; closing it stops the app.
+printf '%s\r\n' \
+  '@echo off' \
+  'cd /D "%USERPROFILE%"' \
+  '"%~dp0python\python.exe" "%~dp0app\app\server.py" --api' > "$WIN/Survival LLM Server.bat"
 (cd "$DIST/windows" && rm -f "$DIST/Survival-LLM-windows.zip" && zip -qr "$DIST/Survival-LLM-windows.zip" "Survival LLM")
 
 ls -lh "$DIST"/*.zip

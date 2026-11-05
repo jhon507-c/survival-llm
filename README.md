@@ -118,18 +118,49 @@ your question ─► local model (Ollama) ─► search_library ─► SQLite fu
                         └──── answer with "Sources:" ◄──┘   show_article ─► opens it on screen
 ```
 
-- `app/server.py` serves the chat page on `127.0.0.1` only and runs each turn through `core.py`.
+- `app/server.py` serves the chat page on `127.0.0.1` only and runs each turn through `core.py`. With `--api`, `app/openai_api.py` also answers chat programs on other computers (below).
 - `core.py` streams the model's answer and runs its library tools: `search_library`, `read_article`, `show_article`.
 - `library/search.py` searches `index.sqlite` (FTS5, BM25 ranking over ~1,500-character passages, official sources ranked higher) and reads the plain-text Markdown shards.
 - `memory.py` keeps the AI's notes about the person (`survival-llm-memory.txt`, with the app's settings) and, while the person allows it, `core.py` gives the model one short extra turn after answers to messages about the person or their family, to say what to remember, change or forget (a JSON reply the app checks and applies). The notes, today's date and the names of the person's files are added after the instructions when a chat starts.
 - `library/myfiles.py` reads the person's own files into a small index of their own (kept with the app's settings) and searches it together with the library.
 - Everything except Ollama, the app window (pywebview), PDF reading (pypdf) and checking web certificates with the system's own store (truststore) is the Python standard library.
 
+## Use it from other computers
+
+A computer with a graphics card can answer for the others on its network. Chat programs that speak OpenAI's API, such
+as [Open WebUI](https://openwebui.com), then use its model and library, with the app's instructions, library search
+and Sources check. (Pointing Open WebUI at Ollama itself gets the bare model: no library, and none of those.)
+
+1. Start it with the API on. On Windows, double-click **Survival LLM Server.bat** in the Survival LLM folder: the app
+   opens as usual, and a console window shows the address and the API key (closing it quits the app). From source:
+   `python3 app/server.py --api`. It listens on port 8766 on every network the computer is on; `--api 8770` picks
+   another port, `--api 192.168.1.20:8766` one network. Windows asks once whether to let Python through its firewall:
+   allow it on private networks.
+2. In Open WebUI, open **Admin Panel > Settings > Connections**, add an OpenAI API connection with the address it
+   showed (`http://192.168.1.20:8766/v1`, say) and the key. The key is in `api-key.txt` with the app's settings, made
+   the first time; `SURVIVAL_LLM_API_KEY` sets your own.
+3. Pick a model as usual. Its searches and the articles it read are in its reasoning; the answer ends with the Sources line.
+
+How it differs from the app's own window:
+- **No memory, and none of your own files.** The AI neither reads nor saves its notes about you, since anyone with the
+  key could read them. `--api-my-files` lets it search your files too (everyone with the key can then read them).
+- **Reasoning** is Off unless the chat program sends `reasoning_effort` (Open WebUI: Advanced Params): low, medium or
+  high is 1,000, 4,000 or 16,000 tokens. The length limit is the app's normal one.
+- **Answers start after about 200 characters**, so a "Let me check the library" before a lookup can go with the
+  reasoning, and the Sources line comes at the end, once the app has checked it. The rare answer the app has to change
+  after part of it went out (it asked the model again) is followed by the corrected answer.
+- **Open WebUI's own requests** (a chat's title, its tags, follow-up questions) go straight to the model, without the
+  library. Tools added in Open WebUI aren't passed on, and it can't open an article on anyone's screen.
+- **One graphics card for everyone**: answers slow down while several people ask at once.
+- **The key and the chats cross the network unencrypted** (plain HTTP). Use it on a network you trust, or over a VPN
+  such as Tailscale.
+
 ## Run from source
 
 ```bash
 python3 app/server.py          # the app in its own window (needs `pip install pywebview pypdf truststore`; else it uses your browser)
 python3 app/server.py --browser                     # in your web browser instead
+python3 app/server.py --no-browser --api            # no window: only a server, for other computers (above)
 python3 chat.py "How long is fridge food safe in a blackout?"   # terminal; --model NAME picks a model
 ```
 
