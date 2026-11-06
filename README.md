@@ -166,6 +166,7 @@ How it differs from the app's own window:
 python3 app/server.py          # the app in its own window (needs `pip install pywebview pypdf truststore`; else it uses your browser)
 python3 app/server.py --browser                     # in your web browser instead
 python3 app/server.py --no-browser --api            # no window: only a server, for other computers (above)
+python3 app/server.py --autostart on --api 8770     # Windows: start like that at each sign-in (off, status); FORK.md
 python3 chat.py "How long is fridge food safe in a blackout?"   # terminal; --model NAME picks a model
 ```
 

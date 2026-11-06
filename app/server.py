@@ -2179,6 +2179,9 @@ if __name__ == "__main__":
     if sys.stdout is None:  # Windows pythonw (no console): keep the log instead of losing it
         os.makedirs(APP_DIR, exist_ok=True)
         sys.stdout = sys.stderr = open(os.path.join(APP_DIR, "app.log"), "a", buffering=1)
+    if "--autostart" in sys.argv:  # set it to start with the computer (or not), then stop: app/autostart.py
+        import autostart
+        sys.exit(autostart.main(sys.argv))
     os.chdir(os.path.expanduser("~"))  # nor can anything started from here, like the person's own Ollama, hold it
     headless, use_browser = "--no-browser" in sys.argv, "--browser" in sys.argv
     existing = None if "--port" in sys.argv else running_instance()  # an explicit port means "start another"

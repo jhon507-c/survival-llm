@@ -36,7 +36,7 @@ copy_app() {  # $1 = destination folder for the app code
   mkdir -p "$1/library" "$1/app/static"
   cp "$REPO/core.py" "$REPO/memory.py" "$1/"
   cp "$REPO/library/search.py" "$REPO/library/passages.py" "$REPO/library/myfiles.py" "$1/library/"
-  cp "$REPO/app/server.py" "$REPO/app/openai_api.py" "$1/app/"
+  cp "$REPO/app/server.py" "$REPO/app/openai_api.py" "$REPO/app/autostart.py" "$1/app/"
   cp "$REPO/app/static/"* "$1/app/static/"
   cp "$REPO/LICENSE" "$REPO/README.md" "$REPO/SOURCES.md" "$1/"
   echo "$VERSION" > "$1/version.txt"  # the app compares it with the published update.json
@@ -164,6 +164,17 @@ printf '%s\r\n' \
   'set SURVIVAL_LLM_KEEP_ALIVE=5m' \
   'cd /D "%USERPROFILE%"' \
   '"%~dp0python\python.exe" "%~dp0app\app\server.py" --api' > "$WIN/Survival LLM Server.bat"
+# Start it, with the API, each time the person signs in to Windows, or stop that (app/autostart.py).
+printf '%s\r\n' \
+  '@echo off' \
+  'REM Start Survival LLM, with its API, each time you sign in to Windows (no window: open Survival LLM.bat' \
+  'REM to see it). Run "Survival LLM Autostart Off.bat" to stop that.' \
+  '"%~dp0python\python.exe" "%~dp0app\app\server.py" --autostart on --api' \
+  'pause' > "$WIN/Survival LLM Autostart On.bat"
+printf '%s\r\n' \
+  '@echo off' \
+  '"%~dp0python\python.exe" "%~dp0app\app\server.py" --autostart off' \
+  'pause' > "$WIN/Survival LLM Autostart Off.bat"
 (cd "$DIST/windows" && rm -f "$DIST/Survival-LLM-windows.zip" && zip -qr "$DIST/Survival-LLM-windows.zip" "Survival LLM")
 
 ls -lh "$DIST"/*.zip

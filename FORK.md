@@ -18,6 +18,7 @@ artículos que nunca abrió.
 | `app/static/app.js` | Las comprobaciones de espacio de la ventana de la biblioteca usan el disco donde irá la biblioteca. |
 | `core.py` | Parámetro `screen=False` (sin `show_article`); `Fuentes:` se verifica como `Sources:`; las imágenes no se pierden en los modelos sin herramientas; `SURVIVAL_LLM_KEEP_ALIVE` y `SURVIVAL_LLM_NUM_CTX`; corrección de `OLLAMA_HOST=0.0.0.0:11434`. |
 | `packaging/build.sh` | Copia `openai_api.py` a la app y crea `Survival LLM Server.bat` en Windows (con `SURVIVAL_LLM_KEEP_ALIVE=5m`). |
+| `app/autostart.py` (nuevo) | `--autostart on\|off\|status`: arrancar con Windows al iniciar sesión, sin ventana. |
 | `tests/openai_api_test.py` (nuevo) | Pruebas de la API con un modelo y una biblioteca simulados (no necesita Ollama). |
 | `README.md` | Sección "Use it from other computers". |
 
@@ -117,6 +118,35 @@ fáciles: **no se probó con fotos de heridas, plantas o piezas reales**, y un m
 texto. En temas médicos o de comida, no te fíes de lo que el modelo diga que ve.
 
 La ventana propia de la app no tiene entrada de imágenes; esto solo funciona desde Open WebUI.
+
+## Arrancar con Windows (por ejemplo, tras un corte de luz)
+
+`python app/server.py --autostart on [opciones]` deja Survival LLM registrado para arrancar **cada vez que inicias sesión
+en Windows**, sin ventana y con las opciones que le pases (por ejemplo `--api 8770`). `--autostart off` lo quita y
+`--autostart status` dice cómo está. En la app empaquetada hay dos `.bat` para hacerlo con doble clic: `Survival LLM
+Autostart On.bat` (con `--api`) y `Survival LLM Autostart Off.bat`.
+
+- Se guarda en la clave `Run` de tu usuario (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, valor
+  `Survival LLM`). No pide permisos de administrador.
+- Arranca con `pythonw` (sin consola) y `--no-browser`: no se ve nada. Para ver la app, abre `Survival LLM.bat` como
+  siempre: encuentra la que ya está corriendo y abre su ventana. El registro queda en `app.log`, en la carpeta de ajustes.
+- Ollama ya arranca con Windows (la app de Ollama pone su propio acceso directo de inicio); si no estuviera corriendo,
+  Survival LLM lo inicia.
+- Las variables de `Survival LLM Server.bat` (`SURVIVAL_LLM_KEEP_ALIVE=5m`) no van incluidas: el arranque automático usa
+  las variables de entorno de tu usuario. Para el mismo comportamiento, ejecuta una vez `setx SURVIVAL_LLM_KEEP_ALIVE 5m`.
+- Quitarlo del arranque no detiene la que ya está corriendo: ciérrala con Quit en su ventana.
+- Solo está hecho para Windows. En otros sistemas, `--autostart` lo dice y no hace nada.
+
+**Para que arranque solo tras un corte de luz, sin nadie delante, hacen falta dos ajustes fuera del proyecto:**
+
+1. **Que el PC se encienda solo al volver la luz.** Es un ajuste de la BIOS/UEFI, con nombres como "Restore on AC Power
+   Loss", "AC Back" o "After Power Failure": ponlo en "Power On". Cada placa lo llama distinto.
+2. **Que Windows inicie sesión solo.** Sin esto, el PC se queda en la pantalla de inicio de sesión y nada arranca. Se
+   configura con `netplwiz` (desmarcar "Los usuarios deben escribir su nombre y contraseña") o con Autologon de
+   Sysinternals. Ojo: cualquiera que encienda el PC entra en tu sesión.
+
+Probado: la línea que se registra arranca el servidor sin ventana y la API responde; el registro se escribe y se borra
+(`tests/autostart_test.py`, con un nombre de prueba). No se probó un reinicio real de Windows.
 
 ## Tus archivos: PDF con páginas que son solo imágenes
 
